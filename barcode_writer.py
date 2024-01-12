@@ -19,7 +19,7 @@ from reportlab.platypus import Paragraph
 
 A4_WIDTH, A4_HEIGHT = A4
 LETTER_WIDTH, LETTER_HEIGHT = letter
-left, right, top, bottom = 7 * mm, 7 * mm, 14 * mm, 14 * mm
+left, right, top, bottom = 14 * mm, 14 * mm, 11 * mm, 11 * mm
 hor_space, ver_space = A4_WIDTH - left - right, A4_HEIGHT - top - bottom
 rows, cols = 7, 3
 card_width, card_height = hor_space / cols, ver_space / rows
@@ -42,10 +42,30 @@ def remove_barcode_padding(barcode_file):
 
     cropped_image.save(barcode_file)
 
+
 def generate_product_label(pdf_canvas, product, x, y):
     barcode_file = f"barcode_{product['Référence'].strip().replace('/', '_')}.png"
     with open(barcode_file, "wb") as outfile:
         Code128(product['Référence'], writer=ImageWriter()).write(outfile)
+
+    rayon_paragraph_style = ParagraphStyle(
+        'CustomStyle',
+        parent=getSampleStyleSheet()['Normal'],
+        fontName='Helvetica',
+        fontSize=10
+    )
+    rayon_paragraph = Paragraph(f"{product['Code Rayon']}", rayon_paragraph_style)
+    rayon_paragraph.wrapOn(pdf_canvas, card_width * 0.3, card_height)
+
+    price_paragraph_style = ParagraphStyle(
+        'CustomStyle',
+        parent=getSampleStyleSheet()['Normal'],
+        alignment=1,  # centre
+        fontName='Helvetica-Bold',
+        fontSize=20
+    )
+    price_paragraph = Paragraph(f"{product['PV MB']}", price_paragraph_style)
+    price_paragraph.wrapOn(pdf_canvas, card_width, card_height)
 
     desc_paragraph_style = ParagraphStyle(
         'CustomStyle',
@@ -58,38 +78,19 @@ def generate_product_label(pdf_canvas, product, x, y):
 
     pdf_canvas.drawInlineImage(
         barcode_file,
-        x + (card_width * 0.3), y + desc_paragraph.height,
+        x + (card_width * 0.5), y,
         width=card_width * 0.5,
         height=card_height * 0.5
     )
 
-    desc_paragraph.drawOn(pdf_canvas, x, (y - desc_paragraph.height))
+    rayon_paragraph.drawOn(pdf_canvas, x, y + rayon_paragraph.height)
 
-    price_paragraph_style = ParagraphStyle(
-        'CustomStyle',
-        parent=getSampleStyleSheet()['Normal'],
-        alignment=1,  # centre
-        fontName='Helvetica-Bold',
-        fontSize=20
-    )
-    price_paragraph = Paragraph(f"{product['PV MB']}", price_paragraph_style)
-    price_paragraph.wrapOn(pdf_canvas, card_width, card_height)
-    price_paragraph.drawOn(pdf_canvas, x, y + price_paragraph.height + (3 * mm))
+    price_paragraph.drawOn(pdf_canvas, x, y + card_height - price_paragraph.height)
 
-    rayon_paragraph_style = ParagraphStyle(
-        'CustomStyle',
-        parent=getSampleStyleSheet()['Normal'],
-        fontName='Helvetica',
-        fontSize=12
-    )
-    rayon_paragraph = Paragraph(f"{product['Code Rayon']}", rayon_paragraph_style)
-    rayon_paragraph.wrapOn(pdf_canvas, card_width * 0.3, card_height)
-    rayon_paragraph.drawOn(pdf_canvas, x, y + price_paragraph.height + (7 * mm) + rayon_paragraph.height)
+    desc_paragraph.drawOn(pdf_canvas, x, (y + card_height - desc_paragraph.height - price_paragraph.height*2))
 
     os.remove(barcode_file)
 
-# TODO: fix the font sizes
-# TODO: add margin to each page and centralize the cards
 # TODO: factorize code
 # the barcode png files come out in the same size
 # the position for item info is all mixed up
@@ -97,6 +98,7 @@ def generate_product_label(pdf_canvas, product, x, y):
 
 
 def generate_pdf(products, pdf_file, pagesize):
+    print(products)
     sorted_products = sorted(products, key=lambda item: item["Code Rayon"])
     pdf_canvas = canvas.Canvas(pdf_file, pagesize=pagesize)
     rows = 7
@@ -115,12 +117,6 @@ def generate_pdf(products, pdf_file, pagesize):
         y = A4_HEIGHT - ((row+1) * card_height) - bottom
 
         print(product)
-        print(f'row: {row},y: {y}')
-        print()
-        pdf_canvas.setStrokeColorRGB(0, 0, 0)  # Set line color to black
-        pdf_canvas.setLineWidth(5)  # Set line width
-        pdf_canvas.line(0, y, A4_WIDTH, y)  # Adjust y coordinate as needed
-
         generate_product_label(pdf_canvas, product, x, y)
 
     pdf_canvas.save()
@@ -128,4 +124,5 @@ def generate_pdf(products, pdf_file, pagesize):
 
 if __name__ == "__main__":
     Stock = read_csvfile('grille_stoko.csv')
+    test_stock = [Stock[1]]
     generate_pdf(Stock, "test_doc.pdf", A4)
