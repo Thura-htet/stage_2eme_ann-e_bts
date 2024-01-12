@@ -1,0 +1,15 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+chardet = "==5.2.0"
+pillow = "==10.2.0"
+python-barcode = "==0.15.1"
+reportlab = "==4.0.8"
+
+[dev-packages]
+
+[requires]
+python_version = "3.9"
