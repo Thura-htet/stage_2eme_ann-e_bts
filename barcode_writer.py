@@ -1,5 +1,6 @@
-from io import BytesIO
+import argparse
 import csv
+import pandas as pd
 from itertools import product
 import os
 
@@ -25,13 +26,22 @@ rows, cols = 7, 3
 card_width, card_height = hor_space / cols, ver_space / rows
 
 
-def read_csvfile(file):
-    Stock = []
-    with open(file, newline='') as csvfile:
-        reader = csv.DictReader(csvfile, delimiter='\t')
-        for row in reader:
-            Stock.append(row)
-    return Stock
+def read_file(file, sheet_name=None):
+    file_ext = file.split(".")[-1]
+    if file_ext == "csv":
+        with open(file, newline='') as csvfile:
+            df = pd.read_csv(csvfile, sep='\t')
+            stock = df.to_dict('records')
+            return stock
+
+    elif file_ext == "xlsm" or file_ext == "xlsx":
+        try:
+            with pd.ExcelFile(file) as xls:
+                df = pd.read_excel(xls, sheet_name=sheet_name, header=0)
+                stock = df.to_dict('records')
+                return stock
+        except Exception as e:
+            print(f"Error reading {file}: {e}")
 
 
 def remove_barcode_padding(barcode_file):
@@ -44,9 +54,9 @@ def remove_barcode_padding(barcode_file):
 
 
 def generate_product_label(pdf_canvas, product, x, y):
-    barcode_file = f"barcode_{product['Référence'].strip().replace('/', '_')}.png"
+    barcode_file = f"barcode_{str(product['Référence']).strip().replace('/', '_')}.png"
     with open(barcode_file, "wb") as outfile:
-        Code128(product['Référence'], writer=ImageWriter()).write(outfile)
+        Code128(str(product['Référence']), writer=ImageWriter()).write(outfile)
 
     rayon_paragraph_style = ParagraphStyle(
         'CustomStyle',
@@ -64,7 +74,10 @@ def generate_product_label(pdf_canvas, product, x, y):
         fontName='Helvetica-Bold',
         fontSize=20
     )
-    price_paragraph = Paragraph(f"{product['PV MB']}", price_paragraph_style)
+    price_paragraph = Paragraph(
+        f"{product['PV MB']}" if 'PV MB' in product else f"{product['PV MB CALCULE COEFF']} CHF",
+        price_paragraph_style
+    )
     price_paragraph.wrapOn(pdf_canvas, card_width, card_height)
 
     desc_paragraph_style = ParagraphStyle(
@@ -78,9 +91,9 @@ def generate_product_label(pdf_canvas, product, x, y):
 
     pdf_canvas.drawInlineImage(
         barcode_file,
-        x + (card_width * 0.5), y,
-        width=card_width * 0.5,
-        height=card_height * 0.5
+        x + (card_width * 0.4), y,
+        width=card_width * 0.6,
+        height=card_height * 0.8
     )
 
     rayon_paragraph.drawOn(pdf_canvas, x, y + rayon_paragraph.height)
@@ -92,9 +105,8 @@ def generate_product_label(pdf_canvas, product, x, y):
     os.remove(barcode_file)
 
 # TODO: factorize code
-# the barcode png files come out in the same size
-# the position for item info is all mixed up
-# the extra space at the bottom of the pages are due to vertical margins
+# TODO: could crop the barcode image
+# TODO: read excel files
 
 
 def generate_pdf(products, pdf_file, pagesize):
@@ -117,12 +129,27 @@ def generate_pdf(products, pdf_file, pagesize):
         y = A4_HEIGHT - ((row+1) * card_height) - bottom
 
         print(product)
+        print()
         generate_product_label(pdf_canvas, product, x, y)
 
     pdf_canvas.save()
 
 
-if __name__ == "__main__":
-    Stock = read_csvfile('grille_stoko.csv')
-    test_stock = [Stock[1]]
+def main(args):
+    Stock = read_file('test_stock.xlsm', "Sheet1")
     generate_pdf(Stock, "test_doc.pdf", A4)
+
+
+if __name__ == "__main__":
+    # Create an argument parser
+    parser = argparse.ArgumentParser(description="Your program description")
+
+    # Add command-line arguments
+    parser.add_argument("--arg1", type=int, help="Description of argument 1")
+    parser.add_argument("--arg2", type=str, default="default_value", help="Description of argument 2")
+
+    # Parse the command-line arguments
+    args = parser.parse_args()
+
+    # Call the main function with parsed arguments
+    main(args)
