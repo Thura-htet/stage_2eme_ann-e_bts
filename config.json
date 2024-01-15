@@ -1,0 +1,13 @@
+{
+  "page_size": "A4",
+  "margin" : {
+    "top" : 14,
+    "right" : 11,
+    "bottom": 14,
+    "left": 11
+  },
+  "dimensions" : {
+    "rows": 7,
+    "cols": 3
+  }
+}
