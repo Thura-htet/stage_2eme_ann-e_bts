@@ -1,8 +1,5 @@
 import json
 
-from reportlab.lib.units import mm
-from reportlab.lib.pagesizes import letter, legal, A4, A3
-
 
 def read_config(file_path):
     try:
