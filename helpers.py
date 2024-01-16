@@ -21,6 +21,8 @@ class PDFProcessor:
         self.stock = None
         self.pdf_canvas = None
         self.out_file = None
+        self.num_generated = 0
+        self.errors = []
 
         self.page_size = self.get_page_size(configs["page_size"])
         self.configs = configs
@@ -45,8 +47,10 @@ class PDFProcessor:
         else:
             return A4
 
-    def read_file(self, file, sheet_name=None):
+    def read_file(self, file, sheet_name=None, header=0):
         file_ext = file.split(".")[-1]
+        expected_columns = ["Référence", "Désignation", "Code Rayon", "PV MB"]
+
         if file_ext == "csv":
             try:
                 with open(file, newline='') as csvfile:
@@ -59,7 +63,8 @@ class PDFProcessor:
         elif file_ext == "xlsm" or file_ext == "xlsx":
             try:
                 with pd.ExcelFile(file) as xls:
-                    df = pd.read_excel(xls, sheet_name=sheet_name, header=0)
+                    df = pd.read_excel(xls, sheet_name=sheet_name, header=header)
+                    print(df.columns)
                     self.stock = df.to_dict('records')
                     print(f"read {file} successfully")
             except Exception as e:
@@ -101,7 +106,10 @@ class PDFProcessor:
         # barcode.save(barcode_file, options)
 
         with open(barcode_file, "wb") as outfile:
-            Code128(str(product['Référence']), writer=ImageWriter()).write(outfile, options)
+            try:
+                Code128(str(product['Référence']), writer=ImageWriter()).write(outfile, options)
+            except Exception as e:
+                print(f"Error generating barcode image for product <{product}>: {e}")
 
         # self.crop_barcode(barcode_file)
 
@@ -152,7 +160,7 @@ class PDFProcessor:
         os.remove(barcode_file)
 
     def generate_pdf(self, pdf_file):
-        sorted_products = sorted(self.stock, key=lambda item: item["Code Rayon"])
+        sorted_products = sorted(self.stock, key=lambda item: str(item["Code Rayon"]))
         self.pdf_canvas = canvas.Canvas(self.out_file, pagesize=self.page_size)
         y = 0
 
@@ -168,8 +176,20 @@ class PDFProcessor:
             # we need to save the space for the height of one row
             y = self.doc_height - ((row + 1) * self.card_height) - self.top
 
-            print(product)
-            print()
-            self.generate_product_label(self.pdf_canvas, product, x, y)
+            # print(product)
+            # print()
+
+            try:
+                self.generate_product_label(self.pdf_canvas, product, x, y)
+                self.num_generated += 1
+            except Exception as e:
+                print(f"Error generating product label for product {product['Référence']}: {e}")
+                print()
+                self.errors.append({
+                    "row": i,
+                    "Référence": product["Référence"],
+                    "Désignation": product["Désignation"],
+                    "Code Rayon": product["Code Rayon"],
+                })
 
         self.pdf_canvas.save()

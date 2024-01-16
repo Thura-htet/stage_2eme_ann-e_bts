@@ -11,11 +11,18 @@ from config import *
 
 
 def main(args):
+    print(args)
     configs = read_config("config.json")  # move this to main and call it before the object initialization
 
     doc = PDFProcessor(configs)
-    doc.read_file(args.file_path, args.sheet_name)
+    doc.read_file(args.file_path, args.sheet_name, (args.header_row-1))
     doc.generate_pdf("test_doc.pdf")
+
+    print(f"number of labels generated: {doc.num_generated}")
+    print()
+    print(f"number of errors: {len(doc.errors)}")
+    print(f"erroneous labels for products in rows: {[product['row'] for product in doc.errors]}"
+          f"\nin sheet <{args.sheet_name}> of file <{args.file_path}>")
 
 
 if __name__ == "__main__":
@@ -34,6 +41,11 @@ if __name__ == "__main__":
                         choices=["A4", "A3", "letter", "legal"],
                         help="Page size or type of paper (A4, A3, letter, legal)"
                         )
+    parser.add_argument("--header_row",
+                        type=int,
+                        default=0,
+                        help="Specify the position of the header row (e.g. 1 if the first row in the sheet is the "
+                             "header)")
 
     # Parse the command-line arguments
     args = parser.parse_args()
