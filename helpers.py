@@ -1,7 +1,8 @@
-import pandas as pd
 import os
 
 from PIL import Image
+
+import pandas as pd
 
 from barcode import Code128
 from barcode import EAN13
@@ -22,6 +23,7 @@ class PDFProcessor:
         self.pdf_canvas = None
         self.out_file = None
         self.num_generated = 0
+        self.num_products = None
         self.errors = []
 
         self.page_size = self.get_page_size(configs["page_size"])
@@ -63,15 +65,16 @@ class PDFProcessor:
         elif file_ext == "xlsm" or file_ext == "xlsx":
             try:
                 with pd.ExcelFile(file) as xls:
+                    if sheet_name is None:
+                        sheet_name = xls.sheet_names[0]
                     df = pd.read_excel(xls, sheet_name=sheet_name, header=header)
-                    print(df.columns)
                     self.stock = df.to_dict('records')
                     print(f"read {file} successfully")
             except Exception as e:
                 print(f"Error reading {file}: {e}")
 
-        product_count = len(self.stock)
-        page_count = 1 + product_count // (self.configs['dimensions']['rows'] * self.configs['dimensions']['cols'])
+        self.num_products = len(self.stock)
+        page_count = 1 + self.num_products // (self.configs['dimensions']['rows'] * self.configs['dimensions']['cols'])
         self.out_file = (f"{file}_{self.configs['dimensions']['rows']}x{self.configs['dimensions']['cols']}"
                          f"-de-page-0001-à-page-{page_count:04d}.pdf")
         self.out_file = self.out_file.replace(f'.{file_ext}', '')
@@ -109,57 +112,59 @@ class PDFProcessor:
             try:
                 Code128(str(product['Référence']), writer=ImageWriter()).write(outfile, options)
             except Exception as e:
-                print(f"Error generating barcode image for product <{product}>: {e}")
+                error = e
+
+            rayon_paragraph_style = ParagraphStyle(
+                'CustomStyle',
+                parent=getSampleStyleSheet()['Normal'],
+                fontName='Helvetica',
+                fontSize=10
+            )
+            rayon_paragraph = Paragraph(f"{product['Code Rayon']}", rayon_paragraph_style)
+            rayon_paragraph.wrapOn(pdf_canvas, self.card_width * 0.3, self.card_height)
+
+            price_paragraph_style = ParagraphStyle(
+                'CustomStyle',
+                parent=getSampleStyleSheet()['Normal'],
+                alignment=1,  # centre
+                fontName='Helvetica-Bold',
+                fontSize=20
+            )
+            price_paragraph = Paragraph(
+                f"{product['PV MB']}" if 'PV MB' in product else f"{product['PV MB CALCULE COEFF']} CHF",
+                price_paragraph_style
+            )
+            price_paragraph.wrapOn(pdf_canvas, self.card_width, self.card_height)
+
+            desc_paragraph_style = ParagraphStyle(
+                'CustomStyle',
+                parent=getSampleStyleSheet()['Normal'],
+                backColor=colors.white,
+                fontName='Helvetica-Bold'
+            )
+            desc_paragraph = Paragraph(product['Désignation'], desc_paragraph_style)
+            desc_paragraph.wrapOn(pdf_canvas, self.card_width, self.card_height)
+
+            pdf_canvas.drawInlineImage(
+                barcode_file,
+                x + (self.card_width * 0.4), y,
+                width=self.card_width * 0.6,
+                height=self.card_height * 0.8
+            )
+            rayon_paragraph.drawOn(pdf_canvas, x, y + rayon_paragraph.height)
+            price_paragraph.drawOn(pdf_canvas, x, y + self.card_height - price_paragraph.height)
+            desc_paragraph.drawOn(
+                pdf_canvas,
+                x, (y + self.card_height - desc_paragraph.height - price_paragraph.height * 2)
+            )
+
+            os.remove(barcode_file)
 
         # self.crop_barcode(barcode_file)
 
-        rayon_paragraph_style = ParagraphStyle(
-            'CustomStyle',
-            parent=getSampleStyleSheet()['Normal'],
-            fontName='Helvetica',
-            fontSize=10
-        )
-        rayon_paragraph = Paragraph(f"{product['Code Rayon']}", rayon_paragraph_style)
-        rayon_paragraph.wrapOn(pdf_canvas, self.card_width * 0.3, self.card_height)
-
-        price_paragraph_style = ParagraphStyle(
-            'CustomStyle',
-            parent=getSampleStyleSheet()['Normal'],
-            alignment=1,  # centre
-            fontName='Helvetica-Bold',
-            fontSize=20
-        )
-        price_paragraph = Paragraph(
-            f"{product['PV MB']}" if 'PV MB' in product else f"{product['PV MB CALCULE COEFF']} CHF",
-            price_paragraph_style
-        )
-        price_paragraph.wrapOn(pdf_canvas, self.card_width, self.card_height)
-
-        desc_paragraph_style = ParagraphStyle(
-            'CustomStyle',
-            parent=getSampleStyleSheet()['Normal'],
-            backColor=colors.white,
-            fontName='Helvetica-Bold'
-        )
-        desc_paragraph = Paragraph(product['Désignation'], desc_paragraph_style)
-        desc_paragraph.wrapOn(pdf_canvas, self.card_width, self.card_height)
-
-        pdf_canvas.drawInlineImage(
-            barcode_file,
-            x + (self.card_width * 0.4), y,
-            width=self.card_width * 0.6,
-            height=self.card_height * 0.8
-        )
-        rayon_paragraph.drawOn(pdf_canvas, x, y + rayon_paragraph.height)
-        price_paragraph.drawOn(pdf_canvas, x, y + self.card_height - price_paragraph.height)
-        desc_paragraph.drawOn(
-            pdf_canvas,
-            x, (y + self.card_height - desc_paragraph.height - price_paragraph.height * 2)
-        )
-
-        os.remove(barcode_file)
-
     def generate_pdf(self, pdf_file):
+        print('Generating PDF...')
+
         sorted_products = sorted(self.stock, key=lambda item: str(item["Code Rayon"]))
         self.pdf_canvas = canvas.Canvas(self.out_file, pagesize=self.page_size)
         y = 0
@@ -176,15 +181,11 @@ class PDFProcessor:
             # we need to save the space for the height of one row
             y = self.doc_height - ((row + 1) * self.card_height) - self.top
 
-            # print(product)
-            # print()
-
             try:
                 self.generate_product_label(self.pdf_canvas, product, x, y)
                 self.num_generated += 1
             except Exception as e:
-                print(f"Error generating product label for product {product['Référence']}: {e}")
-                print()
+                # print(f"Error generating product label for product {product['Référence']}: {e}")
                 self.errors.append({
                     "row": i,
                     "Référence": product["Référence"],

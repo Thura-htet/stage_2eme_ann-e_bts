@@ -4,25 +4,18 @@ from helpers import PDFProcessor
 from config import *
 
 
-# TODO: factorize code
-# TODO: could crop the barcode image
-# TODO: manage configs from here
-# TODO: add error handling
-
-
 def main(args):
-    print(args)
-    configs = read_config("config.json")  # move this to main and call it before the object initialization
+    configs = read_config("configs.json")  # move this to main and call it before the object initialization
 
     doc = PDFProcessor(configs)
     doc.read_file(args.file_path, args.sheet_name, (args.header_row-1))
     doc.generate_pdf("test_doc.pdf")
 
     print(f"number of labels generated: {doc.num_generated}")
-    print()
     print(f"number of errors: {len(doc.errors)}")
-    print(f"erroneous labels for products in rows: {[product['row'] for product in doc.errors]}"
+    print(f"defective labels for products in rows: {[product['row'] for product in doc.errors]}"
           f"\nin sheet <{args.sheet_name}> of file <{args.file_path}>")
+    print("Process completed successfully!")
 
 
 if __name__ == "__main__":
@@ -32,7 +25,7 @@ if __name__ == "__main__":
     # Add command-line arguments
     parser.add_argument("file_path", type=str, help="Path to the stock file (.csv or .xlsm/.xlsx format)")
     parser.add_argument("--sheet_name",
-                        type=str, default="Sheet1",
+                        type=str,
                         help="Name of the excel sheet which contains the stock data"
                         )
     parser.add_argument("--page_size",
@@ -43,7 +36,7 @@ if __name__ == "__main__":
                         )
     parser.add_argument("--header_row",
                         type=int,
-                        default=0,
+                        default=1,
                         help="Specify the position of the header row (e.g. 1 if the first row in the sheet is the "
                              "header)")
 
